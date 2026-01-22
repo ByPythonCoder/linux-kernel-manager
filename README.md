@@ -1,7 +1,7 @@
-Linux Kernel Manager Pro
-
-Linux Kernel Manager Pro is a modern, Cyberpunk-themed Graphical User Interface (GUI) tool designed to monitor and manage Linux kernel parameters, CPU/GPU performance, and system resources in real-time. Built with Python and customtkinter, it provides a powerful yet user-friendly dashboard for Linux enthusiasts and power users.
+Linux Kernel Manager
 =======
+Linux Kernel Manager Pro is a modern, Cyberpunk-themed Graphical User Interface (GUI) tool designed to monitor and manage Linux kernel parameters, CPU/GPU performance, and system resources in real-time. Built with Python and customtkinter, it provides a powerful yet user-friendly dashboard for Linux enthusiasts and power users.
+
 Linux Kernel Manager Pro is a modern Graphical User Interface (GUI) tool developed to manage Linux kernel parameters, CPU/GPU frequencies, and power profiles. It is written in Python using the customtkinter library.
 🚀 Features
 
@@ -114,7 +114,6 @@ Bash
 chmod +x compile.sh
 ./compile.sh
 
-<<<<<<< HEAD
 The resulting executable will be named KernelManager.
 Method 3: Manual Installation
 
