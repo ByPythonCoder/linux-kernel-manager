@@ -1,58 +1,68 @@
-# Linux Kernel Manager Pro
+Linux Kernel Manager Pro
 
-**Linux Kernel Manager Pro**, Linux çekirdek parametrelerini, CPU/GPU frekanslarını ve güç profillerini yönetmek için geliştirilmiş modern bir grafik arayüz (GUI) aracıdır. `customtkinter` kullanılarak Python ile yazılmıştır.
+Linux Kernel Manager Pro is a modern Graphical User Interface (GUI) tool developed to manage Linux kernel parameters, CPU/GPU frequencies, and power profiles. It is written in Python using the customtkinter library.
+🚀 Features
 
-## 🚀 Özellikler
+    CPU Management:
 
-*   **CPU Yönetimi:**
-    *   Frekans ölçekleme (Governor) değiştirme (performance, powersave, schedutil vb.).
-    *   EPP (Energy Performance Preference) ayarları.
-    *   Min/Max frekans limitlerini belirleme.
-    *   Çekirdek bazlı kullanım ve frekans izleme.
-*   **GPU Yönetimi:**
-    *   Anlık kullanım, sıcaklık ve VRAM takibi.
-    *   Güç profili (Governor) değiştirme (NVIDIA, AMD, Intel destekli).
-*   **Bellek ve Disk:**
-    *   RAM kullanımı ve ZRAM yönetimi (Algoritma ve boyut değiştirme).
-    *   Disk I/O scheduler değiştirme (bfq, kyber, mq-deadline vb.).
-*   **Kalıcılık:**
-    *   Ayarları `systemd` servisi olarak kaydedip her açılışta otomatik uygulama.
-*   **Modern Arayüz:**
-    *   Cyberpunk temalı, karanlık/aydınlık mod destekli kullanıcı dostu arayüz.
+        Change frequency scaling governors (performance, powersave, schedutil, etc.).
 
-## 📦 Kurulum ve Çalıştırma
+        Configure EPP (Energy Performance Preference) settings.
 
-### Yöntem 1: Docker (Önerilen)
+        Set Min/Max frequency limits.
 
-Sisteminizi kirletmeden en güvenli çalıştırma yöntemidir.
+        Core-specific usage and frequency monitoring.
 
-1.  Depoyu klonlayın:
-    ```bash
-    git clone https://github.com/ByPythonCoder/linux-kernel-manager.git
-    cd linux-kernel-manager
-    ```
+    GPU Management:
 
-2.  Uygulamayı başlatın:
-    ```bash
-    # Eğer docker-compose eklentisi yüklüyse:
+        Real-time usage, temperature, and VRAM tracking.
+
+        Power profile (Governor) switching (Supports NVIDIA, AMD, and Intel).
+
+    Memory and Disk:
+
+        RAM usage monitoring and ZRAM management (Change algorithm and size).
+
+        Disk I/O scheduler switching (bfq, kyber, mq-deadline, etc.).
+
+    Persistence:
+
+        Save settings as a systemd service to apply them automatically at every boot.
+
+    Modern Interface:
+
+        User-friendly interface with a Cyberpunk theme and support for dark/light modes.
+
+📦 Installation and Execution
+Method 1: Docker (Recommended)
+
+The safest way to run the application without cluttering your system.
+
+    Clone the repository:
+    Bash
+
+git clone https://github.com/ByPythonCoder/linux-kernel-manager.git
+cd linux-kernel-manager
+
+Launch the application:
+Bash
+
+    # If the docker-compose plugin is installed:
     docker compose up --build
-    ```
 
-### Yöntem 2: Tek Dosya (Binary) Oluşturma
+Method 2: Create a Single Binary File
 
-Uygulamayı taşınabilir tek bir dosya haline getirmek için `compile.sh` scriptini kullanabilirsiniz (Docker gerektirir):
+You can use the compile.sh script to turn the application into a single portable executable (requires Docker):
+Bash
 
-```bash
 chmod +x compile.sh
 ./compile.sh
-```
-Bu işlem sonucunda klasörde `KernelManager` adında çalıştırılabilir bir dosya oluşacaktır.
 
-### Yöntem 3: Manuel Kurulum (Geliştiriciler İçin)
+After completion, an executable file named KernelManager will be created in the directory.
+Method 3: Manual Installation (For Developers)
 
-Gerekli sistem paketleri: `python3-tk`, `dmidecode`, `pciutils`, `util-linux`.
+Required system packages: python3-tk, dmidecode, pciutils, util-linux.
+Bash
 
-```bash
 pip install -r requirements.txt
 python main.py
-```
