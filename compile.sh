@@ -56,12 +56,10 @@ fi
 source build_venv/bin/activate
 
 # 3. Bağımlılıkların Yüklenmesi
+# 3. Bağımlılıkların Yüklenmesi
 echo "[3/4] Bağımlılıklar yükleniyor..."
-python -m pip install --upgrade pip wheel setuptools packaging
-# Proje gereksinimleri
-python -m pip install customtkinter pillow
-# Derleme aracı
-python -m pip install nuitka
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 
 # 4. Derleme İşlemi
 echo "[4/4] Nuitka ile derleme başlatılıyor..."

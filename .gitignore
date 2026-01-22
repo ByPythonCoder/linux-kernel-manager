@@ -1,17 +1,18 @@
-# Compiled application binary
-KernelManager
-main.bin
+# Python sanal ortamı
+build_venv/
+venv/
+.venv/
 
-# Nuitka build artifacts
-main.build/
-main.dist/
-main.onefile-build/
-
-# Python cache files
+# Derleme ve Geçici Dosyalar
 __pycache__/
 *.pyc
-*.pyo
+build/
+dist/
+*.spec
 
-# IDE/Editor specific files
+# Çıktı Dosyası
+Linux_Kernel_Manager
+
+# Yerel Ayarlar
 .vscode/
 .idea/
