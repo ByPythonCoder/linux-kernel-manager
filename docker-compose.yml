@@ -1,0 +1,25 @@
+
+services:
+  kernel-manager:
+    build: .
+    container_name: kernel_manager
+    # Host sistemin donanımına tam erişim için kritik
+    privileged: true
+    # Ağ ve PID namespace'ini paylaş (systemd ve ağ yönetimi için)
+    network_mode: host
+    pid: host
+    environment:
+      - DISPLAY=${DISPLAY}
+      # Uygulama içinde kullanıcı adı kontrolü için
+      - SUDO_USER=root
+    volumes:
+      # GUI'yi host ekrana yansıtmak için
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      # Donanım kontrolü (CPU, GPU, Disk) için sysfs ve procfs
+      - /sys:/sys
+      - /proc:/proc
+      # Systemd servislerini yönetmek için
+      - /etc/systemd/system:/etc/systemd/system
+      - /var/run/dbus:/var/run/dbus
+      # Ayarların (profillerin) kaybolmaması için
+      - ~/.config/linux_kernel_manager:/root/.config/linux_kernel_manager

@@ -1,0 +1,17 @@
+# Compiled application binary
+KernelManager
+main.bin
+
+# Nuitka build artifacts
+main.build/
+main.dist/
+main.onefile-build/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE/Editor specific files
+.vscode/
+.idea/
