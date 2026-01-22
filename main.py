@@ -14,151 +14,38 @@ import threading
 from tkinter import messagebox
 import tempfile
 
-# --- Cyberpunk Theme Constants ---
-# Format: (Light Mode Color, Dark Mode Color)
-COLOR_BG = ("#F0F2F5", "#121212")
-COLOR_SURFACE = ("#FFFFFF", "#1E1E1E")
-COLOR_BORDER = ("#D1D5DB", "#333333")
-COLOR_ACCENT_MAIN = ("#0056b3", "#00FF41")  # Dark Blue / Neon Mint
-COLOR_ACCENT_SEC = ("#0EA5E9", "#00D4FF")   # Sky Blue / Electric Cyan
-COLOR_ERROR = ("#EF4444", "#FF5F5F")
-COLOR_WARNING = ("#F59E0B", "#F2C94C")      # Amber / Yellow
-COLOR_TEXT_MAIN = ("#111827", "#FFFFFF")
-COLOR_TEXT_SEC = ("#6B7280", "#B0B0B0")
-COLOR_GRID = ("#E5E7EB", "#2A2A2A")
-COLOR_TAB_TEXT = ("#FFFFFF", "#000000")
-COLOR_TAB_UNSELECTED = ("#6B7280", "#888888")
-COLOR_TAB_HOVER = ("#4B5563", "#AAAAAA")
+from config import *
+from translations import TRANSLATIONS
+from helpers import get_cmd
+from components import LineChart
+from dialogs import PasswordDialog
+import system_info as sys_info
+import kernel_actions as k_actions
 
-FONT_HEADER = ("Inter", 20, "bold")
-FONT_SUBHEADER = ("Inter", 14, "bold")
-FONT_BODY = ("Inter", 12)
-FONT_MONO = ("Monospace", 12)
-
-PROFILES_FILE = os.path.join(os.path.expanduser("~"), ".config", "linux_kernel_manager", "profiles.json")
-
-class LineChart(ctk.CTkCanvas):
-    def __init__(self, master, width=300, height=100, line_color=COLOR_ACCENT_MAIN, line_color2=None, auto_scale=False, **kwargs):
-        # Başlangıç rengini belirle
-        mode = ctk.get_appearance_mode()
-        idx = 1 if mode == "Dark" else 0
-        
-        super().__init__(master, width=width, height=height, highlightthickness=0, bg=COLOR_SURFACE[idx], **kwargs)
-        
-        self.line_color_tuple = line_color
-        self.current_line_color = line_color[idx]
-        
-        self.line_color2_tuple = line_color2
-        self.current_line_color2 = line_color2[idx] if line_color2 else None
-        
-        self.grid_color = COLOR_GRID[idx]
-        self.auto_scale = auto_scale
-        
-        self.data = [0] * 60  # Son 60 veri noktası
-        self.data2 = [0] * 60 if line_color2 else None
-        
-        self.width = width
-        self.height = height
-
-    def update_theme(self, mode):
-        idx = 1 if mode == "Dark" else 0
-        self.configure(bg=COLOR_SURFACE[idx])
-        self.current_line_color = self.line_color_tuple[idx]
-        if self.line_color2_tuple:
-            self.current_line_color2 = self.line_color2_tuple[idx]
-        self.grid_color = COLOR_GRID[idx]
-        self.draw()
-
-    def add_value(self, value, value2=None):
-        # Value 0-100 arası (veya auto_scale ise dinamik)
-        self.data.pop(0)
-        self.data.append(value)
-        
-        if self.data2 is not None and value2 is not None:
-            self.data2.pop(0)
-            self.data2.append(value2)
-            
-        self.draw()
-
-    def draw(self):
-        self.delete("all")
-        
-        # Ölçekleme
-        max_val = 100
-        if self.auto_scale:
-            all_vals = self.data + (self.data2 if self.data2 else [])
-            m = max(all_vals) if all_vals else 0
-            if m > 100: max_val = m * 1.2
-            elif m > 10: max_val = 100
-            else: max_val = 10
-
-        x_gap = self.width / (len(self.data) - 1)
-        
-        # Grid Lines (Cyberpunk Grid)
-        for i in range(1, 5):
-            y = i * (self.height / 5)
-            self.create_line(0, y, self.width, y, fill=self.grid_color, dash=(2, 4))
-
-        def _plot(data_list, color):
-            points = []
-            for i, val in enumerate(data_list):
-                x = i * x_gap
-                if val < 0: val = 0
-                y = self.height - (val / max_val * self.height)
-                points.append(x)
-                points.append(y)
-            if len(points) > 2:
-                self.create_line(points, fill=color, width=4, stipple="gray50", smooth=True)
-                self.create_line(points, fill=color, width=2, smooth=True)
-
-        if self.data2: _plot(self.data2, self.current_line_color2)
-        _plot(self.data, self.current_line_color)
-
-class PasswordDialog(ctk.CTkToplevel):
-    def __init__(self, title="Şifre Gerekiyor", text="Lütfen şifrenizi girin:"):
-        super().__init__()
-        self.geometry("400x200")
-        self.title(title)
-        self.lift()
-        self.attributes("-topmost", True)
-        self.after(10, self.focus_force)
-        self.grab_set()
-        
-        self.password = None
-
-        self.label = ctk.CTkLabel(self, text=text, font=FONT_BODY)
-        self.label.pack(pady=(20, 10), padx=20)
-
-        self.entry = ctk.CTkEntry(self, show="*", width=250)
-        self.entry.pack(pady=10, padx=20)
-        self.entry.bind("<Return>", self._on_ok)
-        self.entry.focus_set()
-
-        self.btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.btn_frame.pack(pady=20)
-
-        self.btn_ok = ctk.CTkButton(self.btn_frame, text="Tamam", command=self._on_ok, width=100, fg_color=COLOR_ACCENT_MAIN)
-        self.btn_ok.pack(side="left", padx=10)
-
-        self.btn_cancel = ctk.CTkButton(self.btn_frame, text="İptal", command=self._on_cancel, width=100, fg_color=COLOR_ERROR)
-        self.btn_cancel.pack(side="left", padx=10)
-
-    def _on_ok(self, event=None):
-        self.password = self.entry.get()
-        self.destroy()
-
-    def _on_cancel(self):
-        self.destroy()
-
-    def get_input(self):
-        self.wait_window()
-        return self.password
+CURRENT_LANG = "tr"
 
 class KernelManager(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("Linux Kernel Manager Pro")
+        # Dil Tespiti
+        self.lang = "tr"
+        if os.path.exists(CONFIG_FILE):
+            try:
+                with open(CONFIG_FILE, "r") as f:
+                    self.lang = json.load(f).get("language", "tr")
+            except: pass
+        else:
+            try:
+                lang_code = os.environ.get("LC_ALL") or os.environ.get("LC_CTYPE") or os.environ.get("LANG")
+                if lang_code and lang_code.startswith("en"):
+                    self.lang = "en"
+            except:
+                pass
+        global CURRENT_LANG
+        CURRENT_LANG = self.lang
+
+        self.title(self.tr("app_title"))
         self.geometry("1200x800")
         ctk.set_appearance_mode("dark")
         self.configure(fg_color=COLOR_BG)
@@ -189,18 +76,24 @@ class KernelManager(ctk.CTk):
         self.logo_label.pack(pady=20, padx=10)
 
         # Kalıcı Yap Butonu
-        self.btn_make_permanent = ctk.CTkButton(self.sidebar, text="Ayarları Kalıcı Yap", command=self.open_persistence_window, fg_color=COLOR_ACCENT_SEC, text_color=COLOR_TAB_TEXT)
+        self.btn_make_permanent = ctk.CTkButton(self.sidebar, text=self.tr("make_permanent"), command=self.open_persistence_window, fg_color=COLOR_ACCENT_SEC, text_color=COLOR_TAB_TEXT)
         self.btn_make_permanent.pack(side="bottom", pady=10, padx=10)
 
         # Profiller Butonu
-        self.btn_profiles = ctk.CTkButton(self.sidebar, text="Profiller", command=self.open_profile_window, fg_color=COLOR_ACCENT_MAIN, text_color=COLOR_TAB_TEXT)
+        self.btn_profiles = ctk.CTkButton(self.sidebar, text=self.tr("profiles"), command=self.open_profile_window, fg_color=COLOR_ACCENT_MAIN, text_color=COLOR_TAB_TEXT)
         self.btn_profiles.pack(side="bottom", pady=10, padx=10)
 
         # Tema Değiştirici
         self.switch_var = ctk.StringVar(value="on")
-        self.theme_switch = ctk.CTkSwitch(self.sidebar, text="Karanlık Mod", command=self.toggle_theme, 
+        self.theme_switch = ctk.CTkSwitch(self.sidebar, text=self.tr("dark_mode"), command=self.toggle_theme, 
                                           variable=self.switch_var, onvalue="on", offvalue="off", progress_color=COLOR_ACCENT_MAIN)
         self.theme_switch.pack(side="bottom", pady=20, padx=10)
+
+        # Dil Seçici
+        self.lang_var = ctk.StringVar(value=self.lang)
+        self.lang_combo = ctk.CTkOptionMenu(self.sidebar, variable=self.lang_var, values=["tr", "en"], command=self.change_language, width=100)
+        self.lang_combo.pack(side="bottom", pady=10, padx=10)
+        ctk.CTkLabel(self.sidebar, text=self.tr("language"), text_color=COLOR_TEXT_SEC).pack(side="bottom", pady=0)
 
         # Main View
         self.main_frame = ctk.CTkFrame(self, corner_radius=15, fg_color=COLOR_BG)
@@ -216,12 +109,12 @@ class KernelManager(ctk.CTk):
                                       text_color=COLOR_TAB_TEXT)
         self.tabview.pack(fill="both", expand=True, padx=10, pady=10)
 
-        self.tab_genel = self.tabview.add("Genel")
-        self.tab_cpu = self.tabview.add("CPU")
-        self.tab_gpu = self.tabview.add("GPU")
-        self.tab_disk_mem = self.tabview.add("Disk ve Bellek")
-        self.tab_network = self.tabview.add("Ağ")
-        self.tab_modules = self.tabview.add("Modüller")
+        self.tab_genel = self.tabview.add(self.tr("tab_general"))
+        self.tab_cpu = self.tabview.add(self.tr("tab_cpu"))
+        self.tab_gpu = self.tabview.add(self.tr("tab_gpu"))
+        self.tab_disk_mem = self.tabview.add(self.tr("tab_disk_mem"))
+        self.tab_network = self.tabview.add(self.tr("tab_network"))
+        self.tab_modules = self.tabview.add(self.tr("tab_modules"))
 
         # --- Genel Sekmesi Layout ---
         self.genel_scroll = ctk.CTkScrollableFrame(self.tab_genel, fg_color="transparent")
@@ -244,34 +137,34 @@ class KernelManager(ctk.CTk):
         # 1. Sistem Bilgileri
         self.frame_os = ctk.CTkFrame(self.genel_scroll, fg_color=COLOR_SURFACE, border_color=COLOR_BORDER, border_width=1, corner_radius=8)
         self.frame_os.pack(fill="x", pady=5, padx=5)
-        ctk.CTkLabel(self.frame_os, text="🖥️ Sistem Bilgileri", font=FONT_SUBHEADER, text_color=COLOR_ACCENT_MAIN).pack(anchor="w", padx=10, pady=5)
+        ctk.CTkLabel(self.frame_os, text=self.tr("system_info"), font=FONT_SUBHEADER, text_color=COLOR_ACCENT_MAIN).pack(anchor="w", padx=10, pady=5)
         self.lbl_os_info = ctk.CTkLabel(self.frame_os, text="...", justify="left", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_os_info.pack(anchor="w", padx=10, pady=(0, 10))
 
         # 2. CPU
         self.frame_cpu_genel = ctk.CTkFrame(self.genel_scroll, fg_color=COLOR_SURFACE, border_color=COLOR_BORDER, border_width=1, corner_radius=8)
         self.frame_cpu_genel.pack(fill="x", pady=5, padx=5)
-        ctk.CTkLabel(self.frame_cpu_genel, text="🧠 İşlemci (CPU)", font=FONT_SUBHEADER, text_color=COLOR_ACCENT_MAIN).pack(anchor="w", padx=10, pady=5)
+        ctk.CTkLabel(self.frame_cpu_genel, text=self.tr("processor"), font=FONT_SUBHEADER, text_color=COLOR_ACCENT_MAIN).pack(anchor="w", padx=10, pady=5)
         self.lbl_cpu_genel = ctk.CTkLabel(self.frame_cpu_genel, text="...", justify="left", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_cpu_genel.pack(anchor="w", padx=10, pady=(0, 10))
 
         # 3. GPU
         self.frame_gpu_genel = ctk.CTkFrame(self.genel_scroll, fg_color=COLOR_SURFACE, border_color=COLOR_BORDER, border_width=1, corner_radius=8)
         self.frame_gpu_genel.pack(fill="x", pady=5, padx=5)
-        ctk.CTkLabel(self.frame_gpu_genel, text="🎮 Ekran Kartı (GPU)", font=FONT_SUBHEADER, text_color=COLOR_ACCENT_MAIN).pack(anchor="w", padx=10, pady=5)
+        ctk.CTkLabel(self.frame_gpu_genel, text=self.tr("graphics"), font=FONT_SUBHEADER, text_color=COLOR_ACCENT_MAIN).pack(anchor="w", padx=10, pady=5)
         self.lbl_gpu_genel = ctk.CTkLabel(self.frame_gpu_genel, text="...", justify="left", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_gpu_genel.pack(anchor="w", padx=10, pady=(0, 10))
 
         # 4. Bellek & Disk
         self.frame_storage = ctk.CTkFrame(self.genel_scroll, fg_color=COLOR_SURFACE, border_color=COLOR_BORDER, border_width=1, corner_radius=8)
         self.frame_storage.pack(fill="x", pady=5, padx=5)
-        ctk.CTkLabel(self.frame_storage, text="💾 Bellek ve Disk", font=FONT_SUBHEADER, text_color=COLOR_ACCENT_MAIN).pack(anchor="w", padx=10, pady=5)
+        ctk.CTkLabel(self.frame_storage, text=self.tr("memory_disk"), font=FONT_SUBHEADER, text_color=COLOR_ACCENT_MAIN).pack(anchor="w", padx=10, pady=5)
         self.lbl_storage_genel = ctk.CTkLabel(self.frame_storage, text="...", justify="left", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_storage_genel.pack(anchor="w", padx=10, pady=(0, 10))
 
         # 5. Batarya (Varsayılan olarak gizli, varsa gösterilir)
         self.frame_battery = ctk.CTkFrame(self.genel_scroll, fg_color=COLOR_SURFACE, border_color=COLOR_BORDER, border_width=1, corner_radius=8)
-        self.lbl_battery_header = ctk.CTkLabel(self.frame_battery, text="🔋 Batarya", font=FONT_SUBHEADER, text_color=COLOR_ACCENT_MAIN)
+        self.lbl_battery_header = ctk.CTkLabel(self.frame_battery, text=self.tr("battery"), font=FONT_SUBHEADER, text_color=COLOR_ACCENT_MAIN)
         self.lbl_battery_header.pack(anchor="w", padx=10, pady=5)
         self.lbl_battery_info = ctk.CTkLabel(self.frame_battery, text="...", justify="left", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_battery_info.pack(anchor="w", padx=10, pady=(0, 10))
@@ -287,11 +180,11 @@ class KernelManager(ctk.CTk):
         self.ram_right = ctk.CTkFrame(self.ram_frame, fg_color="transparent")
         self.ram_right.pack(side="right", fill="both", padx=10, pady=10)
 
-        ctk.CTkLabel(self.ram_left, text="Bellek (RAM)", font=FONT_HEADER, text_color=COLOR_ACCENT_MAIN).pack(pady=5, anchor="w")
-        self.lbl_ram_total = ctk.CTkLabel(self.ram_left, text="RAM Kapasitesi: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        ctk.CTkLabel(self.ram_left, text="RAM", font=FONT_HEADER, text_color=COLOR_ACCENT_MAIN).pack(pady=5, anchor="w")
+        self.lbl_ram_total = ctk.CTkLabel(self.ram_left, text=f"{self.tr('ram_capacity')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_ram_total.pack(pady=2, anchor="w")
 
-        self.lbl_ram_usage = ctk.CTkLabel(self.ram_left, text="Kullanım: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_ram_usage = ctk.CTkLabel(self.ram_left, text=f"{self.tr('usage')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_ram_usage.pack(pady=2, anchor="w")
 
         self.ram_progress = ctk.CTkProgressBar(self.ram_left, width=300, progress_color=COLOR_ACCENT_MAIN)
@@ -301,7 +194,7 @@ class KernelManager(ctk.CTk):
         self.ram_stats_frame = ctk.CTkFrame(self.ram_left, fg_color="transparent")
         self.ram_stats_frame.pack(pady=5, fill="x", anchor="w")
 
-        self.lbl_ram = ctk.CTkLabel(self.ram_stats_frame, text="RAM Hızı: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_ram = ctk.CTkLabel(self.ram_stats_frame, text=f"{self.tr('ram_speed')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_ram.pack(side="left", padx=(0, 10))
 
         # ZRAM Section (New Layout)
@@ -309,7 +202,7 @@ class KernelManager(ctk.CTk):
         
         self.zram_stats_frame = ctk.CTkFrame(self.ram_left, fg_color="transparent")
         self.zram_stats_frame.pack(fill="x", anchor="w")
-        self.lbl_zram_stats = ctk.CTkLabel(self.zram_stats_frame, text="Durum: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_zram_stats = ctk.CTkLabel(self.zram_stats_frame, text=f"{self.tr('status')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_zram_stats.pack(anchor="w")
 
         self.zram_control_frame = ctk.CTkFrame(self.ram_left, fg_color="transparent")
@@ -319,9 +212,9 @@ class KernelManager(ctk.CTk):
         self.cmb_zram_algo = ctk.CTkOptionMenu(self.zram_control_frame, variable=self.zram_algo_var, values=[], command=self.change_zram_algo, width=100, fg_color=COLOR_SURFACE, button_color=COLOR_ACCENT_MAIN)
         self.cmb_zram_algo.pack(side="left", padx=(0, 10))
 
-        self.entry_zram_size = ctk.CTkEntry(self.zram_control_frame, width=80, placeholder_text="Boyut (2G)")
+        self.entry_zram_size = ctk.CTkEntry(self.zram_control_frame, width=80, placeholder_text=self.tr("size_placeholder"))
         self.entry_zram_size.pack(side="left", padx=(0, 5))
-        self.btn_zram_size = ctk.CTkButton(self.zram_control_frame, text="Ayarla", width=60, command=self.change_zram_size, fg_color=COLOR_ACCENT_MAIN, text_color=("white", "black"))
+        self.btn_zram_size = ctk.CTkButton(self.zram_control_frame, text=self.tr("set"), width=60, command=self.change_zram_size, fg_color=COLOR_ACCENT_MAIN, text_color=("white", "black"))
         self.btn_zram_size.pack(side="left")
 
         # RAM Chart (Right)
@@ -339,12 +232,12 @@ class KernelManager(ctk.CTk):
         self.disk_right = ctk.CTkFrame(self.disk_frame, fg_color="transparent")
         self.disk_right.pack(side="right", fill="both", padx=10, pady=10)
 
-        ctk.CTkLabel(self.disk_left, text="Disk Durumu", font=FONT_HEADER, text_color=COLOR_ACCENT_MAIN).pack(pady=5, anchor="w")
+        ctk.CTkLabel(self.disk_left, text=self.tr("disk_status"), font=FONT_HEADER, text_color=COLOR_ACCENT_MAIN).pack(pady=5, anchor="w")
 
-        self.lbl_disk_root = ctk.CTkLabel(self.disk_left, text="Root (/): ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_disk_root = ctk.CTkLabel(self.disk_left, text=f"{self.tr('root_disk')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_disk_root.pack(pady=2, anchor="w")
 
-        self.lbl_disk_home = ctk.CTkLabel(self.disk_left, text="Home (/home): ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_disk_home = ctk.CTkLabel(self.disk_left, text=f"{self.tr('home_disk')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_disk_home.pack(pady=2, anchor="w")
 
         self.disk_sched_frame = ctk.CTkFrame(self.disk_left, fg_color="transparent")
@@ -354,13 +247,13 @@ class KernelManager(ctk.CTk):
         self.cmb_disk_sched = ctk.CTkOptionMenu(self.disk_sched_frame, variable=self.disk_sched_var, values=[], command=self.change_disk_scheduler, width=120, fg_color=COLOR_SURFACE, button_color=COLOR_ACCENT_MAIN)
         self.cmb_disk_sched.pack(side="left")
 
-        self.lbl_disk_load = ctk.CTkLabel(self.disk_left, text="Disk Yükü (I/O): ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_disk_load = ctk.CTkLabel(self.disk_left, text=f"{self.tr('disk_load')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_disk_load.pack(pady=2, anchor="w")
 
-        self.lbl_disk_speed = ctk.CTkLabel(self.disk_left, text="Disk Hızı: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_disk_speed = ctk.CTkLabel(self.disk_left, text=f"{self.tr('disk_speed')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_disk_speed.pack(pady=2, anchor="w")
 
-        self.lbl_disk_temp = ctk.CTkLabel(self.disk_left, text="Sıcaklık: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_disk_temp = ctk.CTkLabel(self.disk_left, text=f"{self.tr('temperature')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_disk_temp.pack(pady=2, anchor="w")
 
         # Disk Chart (Right)
@@ -378,27 +271,27 @@ class KernelManager(ctk.CTk):
         self.net_right = ctk.CTkFrame(self.network_frame, fg_color="transparent")
         self.net_right.pack(side="right", fill="both", padx=10, pady=10)
 
-        ctk.CTkLabel(self.net_left, text="🌐 Ağ Durumu", font=FONT_HEADER, text_color=COLOR_ACCENT_MAIN).pack(pady=5, anchor="w")
+        ctk.CTkLabel(self.net_left, text=self.tr("network_status"), font=FONT_HEADER, text_color=COLOR_ACCENT_MAIN).pack(pady=5, anchor="w")
         
-        self.lbl_net_interface = ctk.CTkLabel(self.net_left, text="Arayüz: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_net_interface = ctk.CTkLabel(self.net_left, text=f"{self.tr('interface')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_net_interface.pack(pady=2, anchor="w")
 
-        self.lbl_net_name = ctk.CTkLabel(self.net_left, text="Ağ Adı: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_net_name = ctk.CTkLabel(self.net_left, text=f"{self.tr('network_name')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_net_name.pack(pady=2, anchor="w")
 
-        self.lbl_net_ip = ctk.CTkLabel(self.net_left, text="IP Adresi: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_net_ip = ctk.CTkLabel(self.net_left, text=f"{self.tr('ip_address')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_net_ip.pack(pady=2, anchor="w")
 
-        self.lbl_net_dns = ctk.CTkLabel(self.net_left, text="DNS: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_net_dns = ctk.CTkLabel(self.net_left, text=f"DNS: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_net_dns.pack(pady=2, anchor="w")
 
-        self.lbl_net_speed_down = ctk.CTkLabel(self.net_left, text="İndirme: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_net_speed_down = ctk.CTkLabel(self.net_left, text=f"{self.tr('download')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_net_speed_down.pack(pady=2, anchor="w")
 
-        self.lbl_net_speed_up = ctk.CTkLabel(self.net_left, text="Yükleme: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_net_speed_up = ctk.CTkLabel(self.net_left, text=f"{self.tr('upload')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_net_speed_up.pack(pady=2, anchor="w")
 
-        self.lbl_net_total = ctk.CTkLabel(self.net_left, text="Toplam: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_net_total = ctk.CTkLabel(self.net_left, text=f"{self.tr('total')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_net_total.pack(pady=2, anchor="w")
 
         # Network Chart (Right)
@@ -409,11 +302,11 @@ class KernelManager(ctk.CTk):
         self.cpu_info_frame = ctk.CTkFrame(self.tab_cpu, fg_color=COLOR_SURFACE, border_color=COLOR_BORDER, border_width=1, corner_radius=8)
         self.cpu_info_frame.pack(pady=10, padx=10, fill="x")
 
-        ctk.CTkLabel(self.cpu_info_frame, text="İşlemci (CPU)", font=FONT_HEADER, text_color=COLOR_ACCENT_MAIN).pack(pady=5)
+        ctk.CTkLabel(self.cpu_info_frame, text=self.tr("processor"), font=FONT_HEADER, text_color=COLOR_ACCENT_MAIN).pack(pady=5)
         self.lbl_cpu_name = ctk.CTkLabel(self.cpu_info_frame, text="CPU: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_cpu_name.pack(pady=2)
 
-        self.lbl_cpu_cores = ctk.CTkLabel(self.cpu_info_frame, text="Çekirdek: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_cpu_cores = ctk.CTkLabel(self.cpu_info_frame, text=f"{self.tr('cores')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_cpu_cores.pack(pady=2)
         
         self.gov_frame = ctk.CTkFrame(self.cpu_info_frame, fg_color="transparent")
@@ -451,23 +344,23 @@ class KernelManager(ctk.CTk):
         self.cpu_stats_frame = ctk.CTkFrame(self.cpu_info_frame, fg_color="transparent")
         self.cpu_stats_frame.pack(pady=5, fill="x")
 
-        self.lbl_freq = ctk.CTkLabel(self.cpu_stats_frame, text="Frekans: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_freq = ctk.CTkLabel(self.cpu_stats_frame, text=f"{self.tr('frequency')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_freq.pack(side="left", expand=True)
 
-        self.lbl_temp = ctk.CTkLabel(self.cpu_stats_frame, text="Sıcaklık: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_temp = ctk.CTkLabel(self.cpu_stats_frame, text=f"{self.tr('temperature')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_temp.pack(side="left", expand=True)
 
-        self.lbl_fan = ctk.CTkLabel(self.cpu_stats_frame, text="Fan: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_fan = ctk.CTkLabel(self.cpu_stats_frame, text=f"{self.tr('fan')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_fan.pack(side="left", expand=True)
 
-        self.cpu_cores_scroll = ctk.CTkScrollableFrame(self.tab_cpu, label_text="Çekirdek Detayları", fg_color=COLOR_SURFACE, label_text_color=COLOR_ACCENT_MAIN, label_font=FONT_SUBHEADER)
+        self.cpu_cores_scroll = ctk.CTkScrollableFrame(self.tab_cpu, label_text=self.tr("core_details"), fg_color=COLOR_SURFACE, label_text_color=COLOR_ACCENT_MAIN, label_font=FONT_SUBHEADER)
         self.cpu_cores_scroll.pack(pady=10, padx=10, fill="both", expand=True)
 
         # --- GPU Tab İçeriği ---
         self.gpu_info_frame = ctk.CTkFrame(self.tab_gpu, fg_color=COLOR_SURFACE, border_color=COLOR_BORDER, border_width=1, corner_radius=8)
         self.gpu_info_frame.pack(pady=10, padx=10, fill="x")
 
-        ctk.CTkLabel(self.gpu_info_frame, text="Ekran Kartı (GPU)", font=FONT_HEADER, text_color=COLOR_ACCENT_MAIN).pack(pady=5)
+        ctk.CTkLabel(self.gpu_info_frame, text=self.tr("graphics"), font=FONT_HEADER, text_color=COLOR_ACCENT_MAIN).pack(pady=5)
         self.lbl_gpu_name = ctk.CTkLabel(self.gpu_info_frame, text="GPU: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_gpu_name.pack(pady=2)
 
@@ -481,13 +374,13 @@ class KernelManager(ctk.CTk):
         self.gpu_stats_frame = ctk.CTkFrame(self.gpu_info_frame, fg_color="transparent")
         self.gpu_stats_frame.pack(pady=5, fill="x")
 
-        self.lbl_gpu_temp = ctk.CTkLabel(self.gpu_stats_frame, text="Sıcaklık: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_gpu_temp = ctk.CTkLabel(self.gpu_stats_frame, text=f"{self.tr('temperature')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_gpu_temp.pack(side="left", expand=True)
 
-        self.lbl_gpu_usage = ctk.CTkLabel(self.gpu_stats_frame, text="Kullanım: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_gpu_usage = ctk.CTkLabel(self.gpu_stats_frame, text=f"{self.tr('usage')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_gpu_usage.pack(side="left", expand=True)
 
-        self.lbl_gpu_freq = ctk.CTkLabel(self.gpu_stats_frame, text="Frekans: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
+        self.lbl_gpu_freq = ctk.CTkLabel(self.gpu_stats_frame, text=f"{self.tr('frequency')} ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
         self.lbl_gpu_freq.pack(side="left", expand=True)
 
         self.lbl_gpu_vram = ctk.CTkLabel(self.gpu_stats_frame, text="VRAM: ...", font=FONT_MONO, text_color=COLOR_TEXT_SEC)
@@ -520,15 +413,50 @@ class KernelManager(ctk.CTk):
         self.refresh_all()
         self.auto_refresh()
 
-    def _get_cmd(self, cmd):
-        """Komutun tam yolunu bulur (PATH veya yaygın dizinler)."""
-        path = shutil.which(cmd)
-        if path: return path
-        for p in ["/usr/sbin", "/sbin", "/usr/local/sbin", "/usr/bin", "/bin", "/usr/local/bin"]:
-            candidate = os.path.join(p, cmd)
-            if os.path.exists(candidate) and os.access(candidate, os.X_OK):
-                return candidate
-        return cmd
+    def tr(self, key):
+        lang_data = TRANSLATIONS.get(self.lang)
+        if lang_data is None:
+            lang_data = TRANSLATIONS.get("tr", {})
+        return lang_data.get(key, key)
+
+    def change_language(self, choice):
+        self.lang = choice
+        global CURRENT_LANG
+        CURRENT_LANG = choice
+        
+        # Ayarı kaydet
+        try:
+            os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+            config = {}
+            if os.path.exists(CONFIG_FILE):
+                with open(CONFIG_FILE, "r") as f:
+                    config = json.load(f)
+            config["language"] = choice
+            with open(CONFIG_FILE, "w") as f:
+                json.dump(config, f, indent=4)
+        except: pass
+
+        # Otomatik Yeniden Başlat
+        self.stop_thread = True
+        self.destroy()
+        
+        # Restart Logic
+        # Nuitka compiled check: __compiled__ or sys.frozen
+        is_compiled = "__compiled__" in globals() or getattr(sys, 'frozen', False)
+        
+        if is_compiled:
+            executable = sys.executable
+            # Derlenmiş modda sys.argv[0] genellikle binary yoludur ve daha güvenilirdir
+            if sys.argv and os.path.exists(sys.argv[0]):
+                executable = sys.argv[0]
+            executable = os.path.abspath(executable)
+            
+            # os.execl yerine Popen kullanmak onefile modunda daha kararlıdır
+            subprocess.Popen([executable] + sys.argv[1:])
+        else:
+            subprocess.Popen([sys.executable] + sys.argv)
+            
+        sys.exit(0)
 
     def toggle_theme(self):
         if self.switch_var.get() == "on":
@@ -556,49 +484,17 @@ class KernelManager(ctk.CTk):
         self.monitor_thread = threading.Thread(target=self.background_monitor_loop, daemon=True)
         self.monitor_thread.start()
 
-    def _write_to_all_cpu_sysfs(self, file_template, value):
-        """Helper to write a value to a sysfs file for all CPU cores/policies."""
-        try:
-            cpu_count = os.cpu_count() or 1
-            for i in range(cpu_count):
-                # Try both cpuX and policyX paths, as they vary between systems
-                paths = [
-                    file_template.format(i=i, type='cpu'),
-                    file_template.format(i=i, type='policy')
-                ]
-                for path in paths:
-                    if os.path.exists(path) and os.access(path, os.W_OK):
-                        try:
-                            with open(path, "w") as f:
-                                f.write(str(value))
-                            break  # Move to the next core once a path is successfully written
-                        except Exception as e:
-                            print(f"Failed to write to {path}: {e}")
-        except Exception as e:
-            print(f"Error in _write_to_all_cpu_sysfs for file '{file_template}': {e}")
-
     def change_cpu_governor(self, new_gov):
-        self._write_to_all_cpu_sysfs(
-            "/sys/devices/system/cpu/{type}{i}/cpufreq/scaling_governor", new_gov
-        )
+        k_actions.set_cpu_governor(new_gov)
 
     def change_cpu_epp(self, new_epp):
-        # EPP is usually not in policyX path, so we only provide the cpuX template
-        self._write_to_all_cpu_sysfs(
-            "/sys/devices/system/cpu/cpu{i}/cpufreq/energy_performance_preference", new_epp
-        )
+        k_actions.set_cpu_epp(new_epp)
 
     def change_cpu_min_freq(self, choice):
-        val = int(choice.split()[0]) * 1000
-        self._write_to_all_cpu_sysfs(
-            "/sys/devices/system/cpu/{type}{i}/cpufreq/scaling_min_freq", val
-        )
+        k_actions.set_cpu_min_freq(choice)
 
     def change_cpu_max_freq(self, choice):
-        val = int(choice.split()[0]) * 1000
-        self._write_to_all_cpu_sysfs(
-            "/sys/devices/system/cpu/{type}{i}/cpufreq/scaling_max_freq", val
-        )
+        k_actions.set_cpu_max_freq(choice)
 
     def change_zram_algo(self, new_algo):
         def _change():
@@ -617,7 +513,7 @@ class KernelManager(ctk.CTk):
 
                 # 2. Swapoff
                 try:
-                    subprocess.run([self._get_cmd("swapoff"), "/dev/zram0"], check=True, stderr=subprocess.DEVNULL)
+                    subprocess.run([get_cmd("swapoff"), "/dev/zram0"], check=True, stderr=subprocess.DEVNULL)
                 except subprocess.CalledProcessError:
                     pass # Zaten kapalı olabilir veya hata verebilir, devam etmeyi dene
                 
@@ -634,19 +530,19 @@ class KernelManager(ctk.CTk):
                     f.write(disksize)
                 
                 # 6. Mkswap & Swapon
-                subprocess.run([self._get_cmd("mkswap"), "/dev/zram0"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                subprocess.run([self._get_cmd("swapon"), "/dev/zram0"], check=True)
+                subprocess.run([get_cmd("mkswap"), "/dev/zram0"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run([get_cmd("swapon"), "/dev/zram0"], check=True)
                 
                 print(f"ZRAM algorithm changed to {new_algo}")
-                self.after(0, lambda: messagebox.showinfo("Başarılı", f"ZRAM algoritması '{new_algo}' olarak ayarlandı."))
+                self.after(0, lambda: messagebox.showinfo(self.tr("success"), f"ZRAM: {new_algo}"))
             except OSError as e:
                 if e.errno == 16: # Device or resource busy
-                    self.after(0, lambda: messagebox.showerror("Hata", "ZRAM meşgul (Device busy).\nSwap kapatılamadı, cihaz kullanımda."))
+                    self.after(0, lambda: messagebox.showerror(self.tr("error"), "ZRAM busy (Device busy)."))
                 else:
-                    self.after(0, lambda: messagebox.showerror("Hata", f"ZRAM I/O Hatası: {e}"))
+                    self.after(0, lambda: messagebox.showerror(self.tr("error"), f"ZRAM I/O Error: {e}"))
             except Exception as e:
                 print(f"ZRAM Change Error: {e}")
-                self.after(0, lambda: messagebox.showerror("Hata", f"ZRAM değiştirilemedi:\n{e}"))
+                self.after(0, lambda: messagebox.showerror(self.tr("error"), f"ZRAM Error:\n{e}"))
             finally:
                 self.zram_changing = False
         
@@ -669,7 +565,7 @@ class KernelManager(ctk.CTk):
 
                 # 2. Swapoff
                 try:
-                    subprocess.run([self._get_cmd("swapoff"), "/dev/zram0"], check=True, stderr=subprocess.DEVNULL)
+                    subprocess.run([get_cmd("swapoff"), "/dev/zram0"], check=True, stderr=subprocess.DEVNULL)
                 except subprocess.CalledProcessError:
                     pass
                 
@@ -686,61 +582,29 @@ class KernelManager(ctk.CTk):
                     f.write(new_size)
                 
                 # 6. Mkswap & Swapon
-                subprocess.run([self._get_cmd("mkswap"), "/dev/zram0"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                subprocess.run([self._get_cmd("swapon"), "/dev/zram0"], check=True)
+                subprocess.run([get_cmd("mkswap"), "/dev/zram0"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run([get_cmd("swapon"), "/dev/zram0"], check=True)
                 
                 print(f"ZRAM size changed to {new_size}")
-                self.after(0, lambda: messagebox.showinfo("Başarılı", f"ZRAM boyutu '{new_size}' olarak ayarlandı."))
+                self.after(0, lambda: messagebox.showinfo(self.tr("success"), f"ZRAM size: {new_size}"))
             except OSError as e:
                 if e.errno == 16:
-                    self.after(0, lambda: messagebox.showerror("Hata", "ZRAM meşgul (Device busy).\nSwap kapatılamadı."))
+                    self.after(0, lambda: messagebox.showerror(self.tr("error"), "ZRAM busy (Device busy)."))
                 else:
-                    self.after(0, lambda: messagebox.showerror("Hata", f"ZRAM I/O Hatası: {e}"))
+                    self.after(0, lambda: messagebox.showerror(self.tr("error"), f"ZRAM I/O Error: {e}"))
             except Exception as e:
                 print(f"ZRAM Size Change Error: {e}")
-                self.after(0, lambda: messagebox.showerror("Hata", f"ZRAM boyutu değiştirilemedi:\n{e}"))
+                self.after(0, lambda: messagebox.showerror(self.tr("error"), f"ZRAM Error:\n{e}"))
             finally:
                 self.zram_changing = False
         
         threading.Thread(target=_change, daemon=True).start()
 
-    def _get_gpu_sysfs_path(self):
-        best_card_path = "/sys/class/drm/card0/device"
-        max_vram = 0
-        found = False
-        for card in glob.glob("/sys/class/drm/card*"):
-            try:
-                vram_path = os.path.join(card, "device/mem_info_vram_total")
-                if os.path.exists(vram_path):
-                    with open(vram_path, "r") as f:
-                        vram = int(f.read().strip())
-                    if vram > max_vram:
-                        max_vram = vram
-                        best_card_path = os.path.join(card, "device")
-                        found = True
-            except: continue
-        
-        if not found and not os.path.exists(best_card_path):
-            return None
-        return best_card_path
-
     def change_gpu_governor(self, new_gov):
-        try:
-            path = self._get_gpu_sysfs_path()
-            if path:
-                with open(os.path.join(path, "power_dpm_force_performance_level"), "w") as f:
-                    f.write(new_gov)
-        except Exception as e:
-            print(f"GPU Governor Change Error: {e}")
+        k_actions.set_gpu_governor(new_gov)
 
     def change_disk_scheduler(self, new_sched):
-        try:
-            block_dev = self._find_root_block_dev()
-            if block_dev:
-                with open(f"/sys/class/block/{block_dev}/queue/scheduler", "w") as f:
-                    f.write(new_sched)
-        except Exception as e:
-            print(f"Scheduler Change Error: {e}")
+        k_actions.set_disk_scheduler(new_sched)
 
     def auto_refresh(self):
         self.update_ui_from_data()
@@ -772,7 +636,7 @@ class KernelManager(ctk.CTk):
 
         # Kernel
         try:
-            kernel = subprocess.check_output([self._get_cmd('uname'), '-r']).decode().strip()
+            kernel = subprocess.check_output([get_cmd('uname'), '-r']).decode().strip()
         except: kernel = "Unknown"
 
         # Uptime
@@ -806,7 +670,7 @@ class KernelManager(ctk.CTk):
         # GPU
         gpu = "Unknown"
         try:
-            gpu = subprocess.check_output(f"{self._get_cmd('lspci')} | grep -E 'VGA|3D' | cut -d: -f3", shell=True).decode().strip().split('\n')[0]
+            gpu = subprocess.check_output(f"{get_cmd('lspci')} | grep -E 'VGA|3D' | cut -d: -f3", shell=True).decode().strip().split('\n')[0]
         except: pass
 
         # Memory
@@ -843,7 +707,7 @@ class KernelManager(ctk.CTk):
                     cap = f.read().strip()
                 with open(os.path.join(bat_path, "status"), "r") as f:
                     status = f.read().strip()
-                battery_info = f"Doluluk: %{cap}\nDurum: {status}"
+                battery_info = f"{self.tr('battery_full')}: %{cap}\n{self.tr('battery_status')}: {status}"
         except: pass
 
         # ASCII Logo Seçimi
@@ -909,7 +773,7 @@ class KernelManager(ctk.CTk):
         self.lbl_ascii_logo.configure(text=ascii_art)
         self.lbl_os_big.configure(text=os_name)
         
-        self.lbl_os_info.configure(text=f"Host: {host}\nKernel: {kernel}\nUptime: {uptime}\nShell: {shell}")
+        self.lbl_os_info.configure(text=f"{self.tr('host')}: {host}\n{self.tr('kernel')}: {kernel}\n{self.tr('uptime')}: {uptime}\n{self.tr('shell')}: {shell}")
         self.lbl_cpu_genel.configure(text=cpu)
         self.lbl_gpu_genel.configure(text=gpu)
         self.lbl_storage_genel.configure(text=f"Memory: {mem}\nDisk (/): {disk}")
@@ -938,165 +802,24 @@ class KernelManager(ctk.CTk):
         # CPU Çekirdek Sayısı
         if hasattr(self, 'lbl_cpu_cores') and self.lbl_cpu_cores.winfo_exists():
             try:
-                self.lbl_cpu_cores.configure(text=f"Çekirdek Sayısı: {os.cpu_count()}")
+                self.lbl_cpu_cores.configure(text=f"{self.tr('cores')} {os.cpu_count()}")
             except:
                 self.lbl_cpu_cores.configure(text="Çekirdek: Bilinmiyor")
 
         # GPU Model İsmi (lspci gerektirir)
         try:
             # VGA veya 3D controller satırını bul ve ismini al
-            gpu = subprocess.check_output(f"{self._get_cmd('lspci')} | grep -E 'VGA|3D' | cut -d: -f3", shell=True).decode().strip().split('\n')[0]
+            gpu = subprocess.check_output(f"{get_cmd('lspci')} | grep -E 'VGA|3D' | cut -d: -f3", shell=True).decode().strip().split('\n')[0]
             self.lbl_gpu_name.configure(text=f"GPU: {gpu}")
         except:
             self.lbl_gpu_name.configure(text="GPU: Bilinmiyor (lspci kurulu mu?)")
 
         # Toplam RAM
         try:
-            ram = subprocess.check_output(f"{self._get_cmd('free')} -h | grep Mem | awk '{{print $2}}'", shell=True).decode().strip()
-            self.lbl_ram_total.configure(text=f"RAM Kapasitesi: {ram}")
+            ram = subprocess.check_output(f"{get_cmd('free')} -h | grep Mem | awk '{{print $2}}'", shell=True).decode().strip()
+            self.lbl_ram_total.configure(text=f"{self.tr('ram_capacity')} {ram}")
         except:
             self.lbl_ram_total.configure(text="RAM: Bilinmiyor")
-
-    def scan_sensors(self):
-        """
-        /sys/class/hwmon altını dinamik olarak tarar.
-        Dönüş: {'cpu_temp': float|None, 'fan_rpm': int|None, 'gpu_temp': float|None}
-        """
-        data = {'cpu_temp': None, 'fan_rpm': None, 'gpu_temp': None, 'disk_temp': None}
-        hwmon_path = "/sys/class/hwmon"
-        
-        if not os.path.exists(hwmon_path):
-            return data
-
-        best_fan = 0
-
-        # hwmonX klasörlerini gez
-        try:
-            dirs = os.listdir(hwmon_path)
-            for d in dirs:
-                path = os.path.join(hwmon_path, d)
-                name_path = os.path.join(path, "name")
-                
-                chip_name = "unknown"
-                if os.path.exists(name_path):
-                    try:
-                        with open(name_path, "r") as f:
-                            chip_name = f.read().strip()
-                    except: pass
-
-                # Sıcaklıkları Tara
-                # Öncelik: k10temp (AMD), coretemp (Intel), zenpower
-                for temp_file in glob.glob(os.path.join(path, "temp*_input")):
-                    try:
-                        with open(temp_file, "r") as f:
-                            val = int(f.read().strip()) / 1000
-                        
-                        # CPU Sıcaklığı Tahmini
-                        if data['cpu_temp'] is None or ("k10temp" in chip_name or "coretemp" in chip_name):
-                            # Eğer henüz atanmadıysa veya öncelikli bir çip bulduysak
-                            if "k10temp" in chip_name or "coretemp" in chip_name or "zenpower" in chip_name or "cpu" in chip_name:
-                                data['cpu_temp'] = val
-                        
-                        # GPU Sıcaklığı (AMD/Intel açık kaynak sürücüler)
-                        if "amdgpu" in chip_name or "nouveau" in chip_name:
-                            data['gpu_temp'] = val
-                        
-                        # Disk Sıcaklığı (drivetemp modülü veya nvme)
-                        if "drivetemp" in chip_name or "nvme" in chip_name:
-                            # Genellikle disk sıcaklıkları mantıklı değerlerdedir (0-100 arası)
-                            if 0 < val < 100:
-                                # Eğer birden fazla disk varsa sonuncuyu veya ilkini alır
-                                # Öncelik NVMe olabilir
-                                if data['disk_temp'] is None or "nvme" in chip_name:
-                                    data['disk_temp'] = val
-                    except: continue
-
-                # Fanları Tara
-                for fan_file in glob.glob(os.path.join(path, "fan*_input")):
-                    try:
-                        with open(fan_file, "r") as f:
-                            rpm = int(f.read().strip())
-                        # En yüksek devirli fanı ana fan olarak kabul et (genellikle CPU fanıdır)
-                        if rpm > best_fan:
-                            best_fan = rpm
-                            data['fan_rpm'] = rpm
-                    except: continue
-        except Exception:
-            pass
-            
-        return data
-
-    def get_disk_stats(self):
-        stats = None
-        try:
-            # Root dizininin bulunduğu cihazı bul
-            dev = os.stat("/").st_dev
-            major = os.major(dev)
-            minor = os.minor(dev)
-            
-            with open("/proc/diskstats", "r") as f:
-                for line in f:
-                    parts = line.split()
-                    if len(parts) >= 13:
-                        if int(parts[0]) == major and int(parts[1]) == minor:
-                            # index 12: ms spent doing I/Os
-                            # index 5: sectors read
-                            # index 9: sectors written
-                            stats = (int(parts[12]), int(parts[5]), int(parts[9]))
-                            break
-        except:
-            pass
-        
-        if stats: return stats
-
-        # Fallback: /proc/mounts üzerinden cihaz ismini bulma
-        try:
-            root_device = None
-            with open("/proc/mounts", "r") as f:
-                for line in f:
-                    parts = line.split()
-                    if parts[1] == "/":
-                        root_device = parts[0].split('/')[-1] # örn: sda2 veya nvme0n1p2
-                        break
-            
-            if root_device:
-                with open("/proc/diskstats", "r") as f:
-                    for line in f:
-                        parts = line.split()
-                        if len(parts) >= 13 and parts[2] == root_device:
-                            return int(parts[12]), int(parts[5]), int(parts[9])
-        except:
-            pass
-        return 0, 0, 0
-
-    def get_network_stats(self):
-        try:
-            with open("/proc/net/dev", "r") as f:
-                lines = f.readlines()[2:]
-            
-            best_iface = "lo"
-            max_rx = 0
-            best_rx = 0
-            best_tx = 0
-            
-            for line in lines:
-                line = line.strip()
-                if not line: continue
-                if ":" in line:
-                    iface, data = line.split(":", 1)
-                    iface = iface.strip()
-                    stats = data.split()
-                    rx = int(stats[0])
-                    tx = int(stats[8])
-                    if iface == "lo": continue
-                    if rx > max_rx:
-                        max_rx = rx
-                        best_iface = iface
-                        best_rx = rx
-                        best_tx = tx
-            return best_iface, best_rx, best_tx
-        except:
-            return "N/A", 0, 0
 
     def background_monitor_loop(self):
         """
@@ -1192,14 +915,14 @@ class KernelManager(ctk.CTk):
                     data['current_max_freq'] = "N/A"
 
                 # 2. Sensörler (Sıcaklık, Fan)
-                data['sensors'] = self.scan_sensors()
+                data['sensors'] = sys_info.scan_sensors()
 
                 # 3. GPU Verileri (Subprocess içerir - Ağır İşlem)
                 gpu_data = {'temp': None, 'usage': None, 'vram_used': 0, 'vram_total': 0, 'freq': None, 'gov': 'N/A', 'avail_govs': []}
                 
                 # NVIDIA Check
                 try:
-                    out = subprocess.check_output(f"{self._get_cmd('nvidia-smi')} --query-gpu=temperature.gpu,utilization.gpu,memory.used,memory.total,clocks.gr --format=csv,noheader,nounits", shell=True, stderr=subprocess.DEVNULL).decode().strip()
+                    out = subprocess.check_output(f"{get_cmd('nvidia-smi')} --query-gpu=temperature.gpu,utilization.gpu,memory.used,memory.total,clocks.gr --format=csv,noheader,nounits", shell=True, stderr=subprocess.DEVNULL).decode().strip()
                     parts = out.split(',')
                     if len(parts) >= 5:
                         gpu_data['temp'] = float(parts[0])
@@ -1213,7 +936,7 @@ class KernelManager(ctk.CTk):
                         gpu_data['temp'] = data['sensors']['gpu_temp']
                     
                     # AMD Kart Bulma
-                    best_card_path = self._get_gpu_sysfs_path()
+                    best_card_path = sys_info.get_gpu_sysfs_path()
                     
                     # AMD Usage
                     if best_card_path and os.path.exists(os.path.join(best_card_path, "gpu_busy_percent")):
@@ -1257,18 +980,18 @@ class KernelManager(ctk.CTk):
 
                 # 4. RAM Hızı (Subprocess - Ağır)
                 try:
-                    cmd = f"{self._get_cmd('dmidecode')} -t memory | grep 'Configured Memory Speed:' | head -1 | awk -F: '{{print $2}}'"
+                    cmd = f"{get_cmd('dmidecode')} -t memory | grep 'Configured Memory Speed:' | head -1 | awk -F: '{{print $2}}'"
                     data['ram_speed'] = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode("utf-8").strip()
                 except:
                     data['ram_speed'] = None
 
                 # 5. RAM Kullanımı (/proc/meminfo)
-                data['mem_info'] = self._read_meminfo()
+                data['mem_info'] = sys_info.read_meminfo()
 
                 # 6. ZRAM
                 data['zram_info'] = None
                 try:
-                    zram_out = subprocess.check_output(f"{self._get_cmd('zramctl')} --output ALGORITHM,DISKSIZE,DATA --raw --noheadings", shell=True, stderr=subprocess.DEVNULL).decode("utf-8").strip()
+                    zram_out = subprocess.check_output(f"{get_cmd('zramctl')} --output ALGORITHM,DISKSIZE,DATA --raw --noheadings", shell=True, stderr=subprocess.DEVNULL).decode("utf-8").strip()
                     if zram_out:
                         parts = zram_out.split('\n')[0].split()
                         if len(parts) >= 3:
@@ -1289,18 +1012,18 @@ class KernelManager(ctk.CTk):
                     data['zram_current_algo'] = None
 
                 # 7. Disk Kullanımı
-                data['disk_usage'] = self._read_disk_usage()
-                data['disk_sched'] = self._get_disk_scheduler()
+                data['disk_usage'] = sys_info.read_disk_usage()
+                data['disk_sched'] = sys_info.get_disk_scheduler()
 
                 # 8. Disk I/O Stats
-                data['disk_io'] = self.get_disk_stats()
+                data['disk_io'] = sys_info.get_disk_stats()
 
                 # 9. Network Stats
-                data['net_stats'] = self.get_network_stats()
-                data['net_info'] = self._get_network_details(data['net_stats'][0])
+                data['net_stats'] = sys_info.get_network_stats()
+                data['net_info'] = sys_info.get_network_details(data['net_stats'][0])
 
                 # 10. Core Stats
-                data['core_stats'] = self._calc_core_stats()
+                data['core_stats'], self.prev_stats = sys_info.calc_core_stats(self.prev_stats)
 
                 # Veriyi Paylaşılan Alana Yaz
                 self.shared_data = data
@@ -1321,10 +1044,10 @@ class KernelManager(ctk.CTk):
         # CPU Frekansı (sysfs üzerinden okuma)
         if data.get('cpu_freq'):
             if hasattr(self, 'lbl_freq') and self.lbl_freq.winfo_exists():
-                self.lbl_freq.configure(text=f"Ort. Frekans:\n{data['cpu_freq']:.0f} MHz")
+                self.lbl_freq.configure(text=f"{self.tr('frequency')}\n{data['cpu_freq']:.0f} MHz")
         else:
             if hasattr(self, 'lbl_freq') and self.lbl_freq.winfo_exists():
-                self.lbl_freq.configure(text="Ort. Frekans:\nN/A")
+                self.lbl_freq.configure(text=f"{self.tr('frequency')}\nN/A")
         
         # CPU Governor
         cpu_gov = data.get('cpu_gov', 'N/A')
@@ -1383,7 +1106,7 @@ class KernelManager(ctk.CTk):
                 temp_color = COLOR_ERROR # Kırmızı
 
         if hasattr(self, 'lbl_temp') and self.lbl_temp.winfo_exists():
-            self.lbl_temp.configure(text=f"Sıcaklık:\n{cpu_temp}", text_color=temp_color)
+            self.lbl_temp.configure(text=f"{self.tr('temperature')}\n{cpu_temp}", text_color=temp_color)
 
         # Fan Hızı
         fan_rpm = "0 RPM"
@@ -1391,7 +1114,7 @@ class KernelManager(ctk.CTk):
             fan_rpm = f"{sensor_data['fan_rpm']} RPM"
 
         if hasattr(self, 'lbl_fan') and self.lbl_fan.winfo_exists():
-            self.lbl_fan.configure(text=f"Fan:\n{fan_rpm}")
+            self.lbl_fan.configure(text=f"{self.tr('fan')}\n{fan_rpm}")
 
         # GPU İstatistikleri (Sıcaklık, Kullanım, VRAM)
         gpu_data = data.get('gpu', {})
@@ -1433,14 +1156,14 @@ class KernelManager(ctk.CTk):
         if raw_vram_total > 0:
             vram_percent = (raw_vram_used / raw_vram_total) * 100
 
-        self.lbl_gpu_temp.configure(text=f"Sıcaklık:\n{gpu_temp_str}", text_color=get_color(gpu_temp_val))
-        self.lbl_gpu_usage.configure(text=f"Kullanım:\n{gpu_usage_str}", text_color=get_color(gpu_usage_val))
-        self.lbl_gpu_freq.configure(text=f"Frekans:\n{gpu_freq_str}")
+        self.lbl_gpu_temp.configure(text=f"{self.tr('temperature')}\n{gpu_temp_str}", text_color=get_color(gpu_temp_val))
+        self.lbl_gpu_usage.configure(text=f"{self.tr('usage')}\n{gpu_usage_str}", text_color=get_color(gpu_usage_val))
+        self.lbl_gpu_freq.configure(text=f"{self.tr('frequency')}\n{gpu_freq_str}")
         self.lbl_gpu_vram.configure(text=f"VRAM:\n{gpu_vram_str}", text_color=get_color(vram_percent))
 
         # RAM Frekansı (dmidecode root yetkisi gerektirir)
-        ram_speed = data.get('ram_speed', "Yetki Yok")
-        if not ram_speed: ram_speed = "Yetki Yok"
+        ram_speed = data.get('ram_speed', self.tr("auth_fail"))
+        if not ram_speed: ram_speed = self.tr("auth_fail")
         self.lbl_ram.configure(text=f"RAM Hızı:\n{ram_speed}")
 
         # RAM Kullanımı ve Progress Bar
@@ -1458,7 +1181,7 @@ class KernelManager(ctk.CTk):
             
             self.ram_progress.set(mem_info['ratio'])
             self.ram_progress.configure(progress_color=prog_col)
-            self.lbl_ram_usage.configure(text=f"Kullanım: {mem_info['used_gb']:.1f} GB / {mem_info['total_gb']:.1f} GB (%{percent:.1f})")
+            self.lbl_ram_usage.configure(text=f"{self.tr('usage')} {mem_info['used_gb']:.1f} GB / {mem_info['total_gb']:.1f} GB (%{percent:.1f})")
             
             # Chart Update
             self.ram_chart.add_value(percent)
@@ -1469,7 +1192,7 @@ class KernelManager(ctk.CTk):
         zram_cur = data.get('zram_current_algo')
 
         if zram_info:
-            self.lbl_zram_stats.configure(text=f"Kullanılan: {zram_info['used']}  |  Toplam: {zram_info['size']}")
+            self.lbl_zram_stats.configure(text=f"Used: {zram_info['used']}  |  Total: {zram_info['size']}")
             if zram_algos:
                 current_vals = self.cmb_zram_algo.cget("values")
                 if current_vals is None or list(current_vals) != zram_algos:
@@ -1480,7 +1203,7 @@ class KernelManager(ctk.CTk):
             # Widget'ları göster
             self.zram_control_frame.pack(fill="x", pady=5, anchor="w")
         else:
-            self.lbl_zram_stats.configure(text="ZRAM Pasif veya Yüklü Değil")
+            self.lbl_zram_stats.configure(text=self.tr("zram_passive"))
             self.zram_control_frame.pack_forget()
 
         # Disk Kullanımı
@@ -1621,157 +1344,6 @@ class KernelManager(ctk.CTk):
             # Update Chart
             self.cpu_chart.add_value(global_usage)
 
-    # --- Helper Methods for Thread ---
-    def _read_meminfo(self):
-        try:
-            with open("/proc/meminfo", "r") as f:
-                meminfo = f.read()
-            total_match = re.search(r'MemTotal:\s+(\d+)', meminfo)
-            avail_match = re.search(r'MemAvailable:\s+(\d+)', meminfo)
-            if total_match and avail_match:
-                total_kb = int(total_match.group(1))
-                avail_kb = int(avail_match.group(1))
-                used_kb = total_kb - avail_kb
-                ratio = used_kb / total_kb
-                return {
-                    'total_gb': total_kb / (1024*1024),
-                    'used_gb': used_kb / (1024*1024),
-                    'ratio': ratio,
-                    'percent': ratio * 100
-                }
-        except: return None
-
-    def _read_disk_usage(self):
-        try:
-            total, used, free = shutil.disk_usage("/")
-            total_h, used_h, free_h = shutil.disk_usage("/home")
-            return {
-                'root': {'used': used // (2**30), 'total': total // (2**30), 'percent': (used/total)*100},
-                'home': {'used': used_h // (2**30), 'total': total_h // (2**30), 'percent': (used_h/total_h)*100}
-            }
-        except: return None
-
-    def _find_root_block_dev(self):
-        try:
-            root_dev = None
-            with open("/proc/mounts", "r") as f:
-                for line in f:
-                    parts = line.split()
-                    if parts[1] == "/":
-                        root_dev = parts[0]
-                        break
-            
-            if root_dev:
-                dev_name = root_dev.split("/")[-1]
-                block_dev = dev_name
-                # Partition ise (sda1 -> sda, nvme0n1p1 -> nvme0n1)
-                if "nvme" in dev_name:
-                    block_dev = re.sub(r'p\d+$', '', dev_name)
-                else:
-                    block_dev = re.sub(r'\d+$', '', dev_name)
-                return block_dev
-        except: pass
-        return None
-
-    def _get_disk_scheduler(self):
-        block_dev = self._find_root_block_dev()
-        if block_dev:
-            sched_path = f"/sys/class/block/{block_dev}/queue/scheduler"
-            if os.path.exists(sched_path):
-                try:
-                    with open(sched_path, "r") as f:
-                        content = f.read().strip()
-                        # Örnek: none [mq-deadline] kyber
-                        available = [x.strip('[]') for x in content.split()]
-                        match = re.search(r'\[(.*?)\]', content)
-                        current = match.group(1) if match else "N/A"
-                        return {'current': current, 'available': available}
-                except: pass
-        return {'current': 'N/A', 'available': []}
-
-    def _get_network_details(self, iface):
-        info = {'ip': '...', 'name': '...', 'dns': '...'}
-        if iface == "N/A": return info
-        
-        try:
-             out = subprocess.check_output(f"{self._get_cmd('ip')} -4 addr show {iface} | grep -oP '(?<=inet\\s)\\d+(\\.\\d+){{3}}'", shell=True, stderr=subprocess.DEVNULL).decode().strip()
-             if out: info['ip'] = out.split('\n')[0]
-        except: pass
-
-        try:
-            # Network Name
-            try:
-                info['name'] = subprocess.check_output(f"{self._get_cmd('nmcli')} -t -f NAME connection show --active | head -n1", shell=True, stderr=subprocess.DEVNULL).decode().strip()
-            except:
-                try:
-                    info['name'] = subprocess.check_output(f"{self._get_cmd('iwgetid')} -r", shell=True, stderr=subprocess.DEVNULL).decode().strip()
-                except: pass
-            
-            # DNS
-            try:
-                dns_out = subprocess.check_output(f"{self._get_cmd('nmcli')} -t -f IP4.DNS connection show --active | head -n1", shell=True, stderr=subprocess.DEVNULL).decode().strip()
-                if dns_out: info['dns'] = dns_out.replace(",", ", ")
-            except: pass
-            
-            if info['dns'] == "...":
-                try:
-                    dev_out = subprocess.check_output(f"{self._get_cmd('nmcli')} dev show | grep 'IP4.DNS'", shell=True, stderr=subprocess.DEVNULL).decode()
-                    ips = re.findall(r':\s+((?:\d{1,3}\.){3}\d{1,3})', dev_out)
-                    if ips: info['dns'] = ", ".join(ips)
-                except: pass
-        except: pass
-        return info
-
-    def _calc_core_stats(self):
-        try:
-            def get_cpu_times():
-                with open("/proc/stat", "r") as f:
-                    lines = f.readlines()
-                stats = {}
-                for line in lines:
-                    if line.startswith("cpu"):
-                        parts = line.split()
-                        core = parts[0]
-                        values = [int(x) for x in parts[1:]]
-                        total = sum(values)
-                        idle = values[3]
-                        stats[core] = (total, idle)
-                return stats
-
-            current_stats = get_cpu_times()
-            if self.prev_stats is None:
-                self.prev_stats = current_stats
-                return []
-            
-            start_stats = self.prev_stats
-            end_stats = current_stats
-            self.prev_stats = end_stats
-            
-            results = []
-            for core in sorted(start_stats.keys(), key=lambda x: int(x[3:]) if x[3:].isdigit() else -1):
-                t1, i1 = start_stats[core]
-                t2, i2 = end_stats[core]
-                diff_total = t2 - t1
-                diff_idle = i2 - i1
-                usage = 0
-                if diff_total > 0:
-                    usage = 100 * (1 - diff_idle / diff_total)
-                
-                freq_txt = "N/A"
-                if core != "cpu":
-                    freq_path = f"/sys/devices/system/cpu/{core}/cpufreq/scaling_cur_freq"
-                    if os.path.exists(freq_path):
-                        try:
-                            with open(freq_path, "r") as f:
-                                freq_mhz = int(f.read().strip()) / 1000
-                                freq_txt = f"{freq_mhz:.0f} MHz"
-                        except: pass
-                
-                results.append((core, usage, freq_txt))
-            return results
-        except Exception as e:
-            return []
-
     def update_module_list(self):
         try:
             kernels = ""
@@ -1786,6 +1358,7 @@ class KernelManager(ctk.CTk):
                 kernels = subprocess.check_output(cmd, shell=True).decode("utf-8")
             else:
                 kernels = "Paket yöneticisi algılanamadı (pacman, rpm, dpkg)."
+                kernels = self.tr("package_manager_fail")
 
             self.module_textbox.delete("1.0", "end")
             self.module_textbox.insert("1.0", kernels)
@@ -1826,7 +1399,7 @@ class KernelManager(ctk.CTk):
         if 'cpu_max_freq' in settings: self.change_cpu_max_freq(settings['cpu_max_freq'])
         if 'gpu_gov' in settings: self.change_gpu_governor(settings['gpu_gov'])
         if 'disk_sched' in settings: self.change_disk_scheduler(settings['disk_sched'])
-        messagebox.showinfo("Profil Yüklendi", "Ayarlar sisteme uygulandı.")
+        messagebox.showinfo(self.tr("success"), self.tr("profile_loaded"))
 
     def load_profiles_from_disk(self):
         if os.path.exists(PROFILES_FILE):
@@ -1842,7 +1415,7 @@ class KernelManager(ctk.CTk):
             with open(PROFILES_FILE, "w") as f:
                 json.dump(profiles, f, indent=4)
         except Exception as e:
-            messagebox.showerror("Hata", f"Profil kaydedilemedi: {e}")
+            messagebox.showerror(self.tr("error"), f"{self.tr('error')}: {e}")
 
     def open_profile_window(self):
         if hasattr(self, 'profile_window') and self.profile_window.winfo_exists():
@@ -1850,12 +1423,12 @@ class KernelManager(ctk.CTk):
             return
 
         self.profile_window = ctk.CTkToplevel(self)
-        self.profile_window.title("Profil Yöneticisi")
+        self.profile_window.title(self.tr("profile_manager"))
         self.profile_window.geometry("500x600")
         self.profile_window.transient(self)
         self.profile_window.after(100, self.profile_window.grab_set)
 
-        ctk.CTkLabel(self.profile_window, text="Kayıtlı Profiller", font=FONT_HEADER).pack(pady=10)
+        ctk.CTkLabel(self.profile_window, text=self.tr("saved_profiles"), font=FONT_HEADER).pack(pady=10)
 
         self.profiles_frame = ctk.CTkScrollableFrame(self.profile_window, height=250)
         self.profiles_frame.pack(fill="x", padx=20, pady=5)
@@ -1889,10 +1462,10 @@ class KernelManager(ctk.CTk):
                 self.save_profiles_to_disk(profiles)
                 refresh_list()
 
-        ctk.CTkButton(btn_frame, text="Seçili Profili Yükle", command=load_selected, fg_color=COLOR_ACCENT_MAIN).pack(side="left", padx=5)
-        ctk.CTkButton(btn_frame, text="Sil", command=delete_selected, fg_color=COLOR_ERROR).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text=self.tr("load_selected"), command=load_selected, fg_color=COLOR_ACCENT_MAIN).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text=self.tr("delete"), command=delete_selected, fg_color=COLOR_ERROR).pack(side="left", padx=5)
 
-        ctk.CTkLabel(self.profile_window, text="Yeni Profil Kaydet", font=FONT_SUBHEADER).pack(pady=(20, 5))
+        ctk.CTkLabel(self.profile_window, text=self.tr("save_new_profile"), font=FONT_SUBHEADER).pack(pady=(20, 5))
         entry_name = ctk.CTkEntry(self.profile_window, placeholder_text="Profil Adı (örn: Oyun Modu)")
         entry_name.pack(pady=5)
 
@@ -1905,7 +1478,7 @@ class KernelManager(ctk.CTk):
             refresh_list()
             entry_name.delete(0, "end")
 
-        ctk.CTkButton(self.profile_window, text="Şu Anki Ayarları Kaydet", command=save_new, fg_color=COLOR_ACCENT_SEC).pack(pady=10)
+        ctk.CTkButton(self.profile_window, text=self.tr("save_current"), command=save_new, fg_color=COLOR_ACCENT_SEC).pack(pady=10)
 
     def open_persistence_window(self):
         if hasattr(self, 'persistence_window') and self.persistence_window.winfo_exists():
@@ -1913,16 +1486,16 @@ class KernelManager(ctk.CTk):
             return
 
         self.persistence_window = ctk.CTkToplevel(self)
-        self.persistence_window.title("Ayarları Kalıcı Yap")
+        self.persistence_window.title(self.tr("make_permanent"))
         self.persistence_window.geometry("600x550")
         self.persistence_window.transient(self)
         # Pencere görünür olmadan grab_set çağrılırsa hata verir.
         self.persistence_window.after(100, self.persistence_window.grab_set)
 
-        lbl_title = ctk.CTkLabel(self.persistence_window, text="Kalıcı Yapılacak Ayarlar", font=FONT_HEADER)
+        lbl_title = ctk.CTkLabel(self.persistence_window, text=self.tr("permanent_settings"), font=FONT_HEADER)
         lbl_title.pack(pady=10)
 
-        info_text = "Bu işlem, seçili ayarları sistem başlangıcında otomatik olarak\nuygulayacak bir sistem servisi (`systemd`) oluşturacaktır.\nDevam etmek için yönetici şifresi gereklidir."
+        info_text = self.tr("perm_info")
         lbl_info = ctk.CTkLabel(self.persistence_window, text=info_text, font=FONT_BODY, text_color=COLOR_TEXT_SEC)
         lbl_info.pack(pady=(0, 15))
 
@@ -1970,10 +1543,10 @@ class KernelManager(ctk.CTk):
 
         self.persistence_window.settings_to_save = settings_to_save
 
-        btn_apply = ctk.CTkButton(self.persistence_window, text="Sistem Servisi Oluştur ve Uygula", command=self.apply_persistence_settings, fg_color=COLOR_ACCENT_MAIN)
+        btn_apply = ctk.CTkButton(self.persistence_window, text=self.tr("apply_service"), command=self.apply_persistence_settings, fg_color=COLOR_ACCENT_MAIN)
         btn_apply.pack(pady=(20, 10))
 
-        btn_remove = ctk.CTkButton(self.persistence_window, text="Servisi Devre Dışı Bırak ve Sil", command=self.remove_persistence_service, fg_color=COLOR_ERROR)
+        btn_remove = ctk.CTkButton(self.persistence_window, text=self.tr("remove_service"), command=self.remove_persistence_service, fg_color=COLOR_ERROR)
         btn_remove.pack(pady=(0, 20))
 
     def apply_persistence_settings(self):
@@ -1981,7 +1554,7 @@ class KernelManager(ctk.CTk):
 
         settings = self.persistence_window.settings_to_save
         if not settings:
-            messagebox.showwarning("Uyarı", "Kalıcı yapılacak bir ayar seçilmedi.", parent=self.persistence_window)
+            messagebox.showwarning(self.tr("warning"), "Kalıcı yapılacak bir ayar seçilmedi.", parent=self.persistence_window)
             return
 
         script_lines = ["#!/bin/bash", "# This script is generated by Kernel Manager to apply settings on boot.", "sleep 15"]
@@ -2022,7 +1595,7 @@ class KernelManager(ctk.CTk):
     def remove_persistence_service(self):
         if not hasattr(self, 'persistence_window') or not self.persistence_window.winfo_exists(): return
 
-        dialog = PasswordDialog(text="Servisi kaldırmak için yönetici (sudo) şifrenizi girin:", title="Yetki Gerekiyor")
+        dialog = PasswordDialog(lang=self.lang, text=self.tr("enter_sudo"), title=self.tr("auth_required"))
         password = dialog.get_input()
 
         if not password:
@@ -2032,10 +1605,10 @@ class KernelManager(ctk.CTk):
 
         def _remove_task():
             try:
-                sudo_path = self._get_cmd('sudo')
+                sudo_path = get_cmd('sudo')
                 
                 def run_sudo_cmd(command_args, p_input, ignore_errors=False):
-                    cmd = self._get_cmd(command_args[0])
+                    cmd = get_cmd(command_args[0])
                     args = [cmd] + command_args[1:]
                     proc = subprocess.Popen([sudo_path, '-S'] + args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     _, stderr = proc.communicate(input=p_input.encode())
@@ -2047,34 +1620,34 @@ class KernelManager(ctk.CTk):
                 run_sudo_cmd(['rm', '-f', '/usr/local/bin/kernel-manager-settings.sh'], password)
                 run_sudo_cmd(['systemctl', 'daemon-reload'], password)
 
-                self.after(0, lambda: messagebox.showinfo("Başarılı", "Sistem servisi ve dosyaları başarıyla kaldırıldı."))
+                self.after(0, lambda: messagebox.showinfo(self.tr("success"), self.tr("service_removed")))
             except subprocess.CalledProcessError as e:
                 error_message = e.stderr.decode()
-                if "incorrect password" in error_message.lower(): error_message = "Hatalı şifre girdiniz."
-                self.after(0, lambda: messagebox.showerror("Hata", f"İşlem başarısız:\n{error_message}"))
+                if "incorrect password" in error_message.lower(): error_message = self.tr("incorrect_pass")
+                self.after(0, lambda: messagebox.showerror(self.tr("error"), f"{self.tr('error')}:\n{error_message}"))
             except Exception as e:
-                self.after(0, lambda: messagebox.showerror("Hata", f"Beklenmedik hata: {e}"))
+                self.after(0, lambda: messagebox.showerror(self.tr("error"), f"{self.tr('error')}: {e}"))
 
         threading.Thread(target=_remove_task, daemon=True).start()
 
     def create_systemd_service(self, script_content):
         service_content = f"""[Unit]\nDescription=Apply Kernel Manager Settings on Boot\nAfter=multi-user.target\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/kernel-manager-settings.sh\n\n[Install]\nWantedBy=multi-user.target\n"""
-        dialog = PasswordDialog(text="Ayarları uygulamak için yönetici (sudo) şifrenizi girin:", title="Yetki Gerekiyor")
+        dialog = PasswordDialog(lang=self.lang, text=self.tr("enter_sudo"), title=self.tr("auth_required"))
         password = dialog.get_input()
 
         if not password:
-            messagebox.showwarning("İptal Edildi", "İşlem kullanıcı tarafından iptal edildi.")
+            messagebox.showwarning(self.tr("cancel"), self.tr("op_cancelled"))
             return
 
         if hasattr(self, 'persistence_window') and self.persistence_window.winfo_exists(): self.persistence_window.destroy()
 
         def _apply_task():
             try:
-                sudo_path = self._get_cmd('sudo')
+                sudo_path = get_cmd('sudo')
                 # tee_path, chmod_path vb. gerek yok, run_sudo_cmd içinde çözülüyor
 
                 def run_sudo_cmd(command_args, p_input):
-                    cmd = self._get_cmd(command_args[0])
+                    cmd = get_cmd(command_args[0])
                     args = [cmd] + command_args[1:]
                     proc = subprocess.Popen([sudo_path, '-S'] + args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     _, stderr = proc.communicate(input=p_input.encode())
@@ -2098,14 +1671,14 @@ class KernelManager(ctk.CTk):
                 write_protected_file('/etc/systemd/system/kernel-manager.service', service_content, password)
                 run_sudo_cmd(['systemctl', 'daemon-reload'], password)
                 run_sudo_cmd(['systemctl', 'enable', '--now', 'kernel-manager.service'], password)
-                self.after(0, lambda: messagebox.showinfo("Başarılı", "Ayarlar kalıcı hale getirildi ve sistem servisi etkinleştirildi."))
+                self.after(0, lambda: messagebox.showinfo(self.tr("success"), self.tr("service_applied")))
             except subprocess.CalledProcessError as e:
                 error_message = e.stderr.decode()
-                if "incorrect password" in error_message.lower(): error_message = "Hatalı şifre girdiniz. Lütfen tekrar deneyin."
+                if "incorrect password" in error_message.lower(): error_message = self.tr("incorrect_pass")
                 else: error_message = f"Bir hata oluştu (Komut: {e.cmd}):\n{error_message}"
-                self.after(0, lambda: messagebox.showerror("Hata", error_message))
-            except FileNotFoundError: self.after(0, lambda: messagebox.showerror("Hata", "Komut bulunamadı. 'sudo' veya 'systemctl' sisteminizde kurulu mu?"))
-            except Exception as e: self.after(0, lambda: messagebox.showerror("Hata", f"Beklenmedik bir hata oluştu: {e}"))
+                self.after(0, lambda: messagebox.showerror(self.tr("error"), error_message))
+            except FileNotFoundError: self.after(0, lambda: messagebox.showerror(self.tr("error"), "Komut bulunamadı. 'sudo' veya 'systemctl' sisteminizde kurulu mu?"))
+            except Exception as e: self.after(0, lambda: messagebox.showerror(self.tr("error"), f"Beklenmedik bir hata oluştu: {e}"))
         threading.Thread(target=_apply_task, daemon=True).start()
 
 class JupyterCompatibilityWrapper:
