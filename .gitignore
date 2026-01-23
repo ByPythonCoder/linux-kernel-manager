@@ -1,18 +1,6 @@
-# Python sanal ortamı
-build_venv/
-venv/
-.venv/
-
-# Derleme ve Geçici Dosyalar
 __pycache__/
-*.pyc
-build/
-dist/
-*.spec
-
-# Çıktı Dosyası
+build_venv/
+*.build/
+*.dist/
+*.onefile-build/
 Linux_Kernel_Manager
-
-# Yerel Ayarlar
-.vscode/
-.idea/
