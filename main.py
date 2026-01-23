@@ -24,24 +24,47 @@ import kernel_actions as k_actions
 
 CURRENT_LANG = "tr"
 
+class SettingsManager:
+    def __init__(self, config_path):
+        self.config_path = config_path
+        self.data = {}
+        self.load()
+
+    def load(self):
+        if os.path.exists(self.config_path):
+            try:
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    self.data = json.load(f)
+            except:
+                self.data = {}
+
+    def save(self):
+        try:
+            os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
+            with open(self.config_path, "w", encoding="utf-8") as f:
+                json.dump(self.data, f, indent=4)
+        except Exception as e:
+            print(f"Settings save error: {e}")
+
 class KernelManager(ctk.CTk):
     def __init__(self):
         super().__init__()
 
+        # Ayar Yöneticisi
+        self.settings = SettingsManager(CONFIG_FILE)
+
         # Dil Tespiti
-        self.lang = "tr"
-        if os.path.exists(CONFIG_FILE):
-            try:
-                with open(CONFIG_FILE, "r") as f:
-                    self.lang = json.load(f).get("language", "tr")
-            except: pass
-        else:
+        self.lang = self.settings.data.get("language")
+        if not self.lang:
             try:
                 lang_code = os.environ.get("LC_ALL") or os.environ.get("LC_CTYPE") or os.environ.get("LANG")
                 if lang_code and lang_code.startswith("en"):
                     self.lang = "en"
+                else:
+                    self.lang = "tr"
             except:
-                pass
+                self.lang = "tr"
+
         global CURRENT_LANG
         CURRENT_LANG = self.lang
 
@@ -425,16 +448,8 @@ class KernelManager(ctk.CTk):
         CURRENT_LANG = choice
         
         # Ayarı kaydet
-        try:
-            os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-            config = {}
-            if os.path.exists(CONFIG_FILE):
-                with open(CONFIG_FILE, "r") as f:
-                    config = json.load(f)
-            config["language"] = choice
-            with open(CONFIG_FILE, "w") as f:
-                json.dump(config, f, indent=4)
-        except: pass
+        self.settings.data["language"] = choice
+        self.settings.save()
 
         # Otomatik Yeniden Başlat
         self.stop_thread = True

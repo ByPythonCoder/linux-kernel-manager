@@ -91,6 +91,12 @@ fi
 $CMD $MAIN_SCRIPT
 
 echo ""
+echo "Derleme sonrası geçici dosyalar temizleniyor..."
+rm -rf "$APP_NAME.build"
+rm -rf build
+rm -rf *.nuitka-build
+
+echo ""
 echo "✅ İşlem Tamamlandı!"
 echo "Çıktı dosyası: $(pwd)/$APP_NAME"
 

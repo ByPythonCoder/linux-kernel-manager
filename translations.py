@@ -10,10 +10,9 @@ def load_translations():
         if hasattr(sys, "frozen"):
             # Derlenmiş halde (Nuitka/PyInstaller)
             # Önce exe'nin yanına bak (harici config için), yoksa temp/bundle dizinine (base_path) bak
-            exe_dir = os.path.dirname(sys.executable)
+            exe_dir = os.path.dirname(os.path.abspath(sys.executable))
             if os.path.exists(os.path.join(exe_dir, "translate.json")):
                 base_path = exe_dir
-        
         file_path = os.path.join(base_path, "translate.json")
         
         if not os.path.exists(file_path):
